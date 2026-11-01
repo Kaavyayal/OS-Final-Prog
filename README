@@ -1,0 +1,211 @@
+Due:
+    11/07/2026 @ 11:59pm (test)
+    11/10/2026 @ 11:59pm (everything working)
+
+Important:
+~~~~~~~~~~
+
+    - Read the README file carefully; things changed.
+
+    - NEVER RUN A TEST PROGRAM (<test>.dir/sbin/init) DIRECTLY ON YOUR
+      MACHINE UNLESS YOU WROTE IT YOURSELF. PEER TESTS (all_tests, ...)
+      ARE PROGRAMS WRITTEN BY OTHER PEOPLE: RUN THEM ONLY THROUGH YOUR
+      KERNEL, INSIDE QEMU (make test, run_qemu, ...). A TEST THAT'S
+      HARMLESS UNDER OUR KERNEL CAN DO SOMETHING VERY DIFFERENT UNDER
+      LINUX; FOR EXAMPLE, A clone3 CALL OUR KERNEL REJECTS CAN BE A FORK
+      UNDER LINUX, AND A LOOP OF THEM IS A FORK BOMB.
+    
+    - The kernel is completely yours; you can change/replace/add anything
+      as long as:
+           - You leave the build environment alone
+           - You implement the required system calls with the correct semantics
+           - The code you push is written by you + given base code on the
+             master branch
+
+Assignment:
+~~~~~~~~~~~
+
+    - Implement more system calls
+    - Donate a test case
+    - Answer the questions in REPORT.txt
+
+No user/libc directory is provided. It's up to you to copy the one from
+p5 and evolve it. Feel free to collaborate with others and share code
+for this part.
+
+The new system calls
+~~~~~~~~~~~~~~~~~~~~
+
+The system calls behave like Linux's: same arguments, same results, same
+errors. Many are a subset of what Linux does; a call asking for a feature
+your kernel doesn't support returns EINVAL.
+
+The numbers in parentheses are the x86-64 system call numbers (RAX).
+
+File descriptors
+
+    - dup3 (292)
+        * flags: O_CLOEXEC only
+    - pipe2 (293)
+        * flags: O_CLOEXEC only
+        * a write to a pipe with no readers returns EPIPE; there is no
+          SIGPIPE
+        * a write is atomic (not mixed with other writers' bytes) only up
+          to 256 bytes, not PIPE_BUF (4096)
+
+Processes
+
+    - getcwd (79)
+    - chdir (80)
+
+Time
+
+    - nanosleep (35)
+        * waits at least the time asked for
+        * not interrupted by signals
+
+Synchronization
+
+    - futex (202): mutual exclusion only
+        * FUTEX_WAIT (without a timeout) and FUTEX_WAKE, with or without
+          FUTEX_PRIVATE_FLAG
+        * Linux's other commands, FUTEX_CLOCK_REALTIME, and a timeout
+          return EINVAL
+
+Signals
+
+    Only 5 signals: SIGINT (2), SIGUSR1 (10), SIGSEGV (11), SIGALRM (14),
+    SIGTERM (15).
+
+    - rt_sigaction (13)
+        * flags: SA_SIGINFO, SA_RESTORER and SA_RESTART only (SA_RESTART
+          has no effect: see below)
+        * oldact is ignored: the old action isn't given back
+        * sigsetsize must be 8
+        * sa_mask: only the 5 signals above matter
+    - rt_sigreturn (15): returns from a handler, through sa_restorer
+    - kill (62)
+        * pid > 0 only (no process groups, no -1)
+        * sig 0 checks that the process is there
+    - alarm (37): delivers SIGALRM
+
+    Limitations:
+        * a handler runs on the thread's stack (no sigaltstack, no
+          SA_ONSTACK)
+        * a handler runs with its signal blocked, plus sa_mask, until it
+          returns; there is no sigprocmask (rt_sigprocmask)
+        * a signal is taken on the way back to user mode. A system call
+          that waits (read, wait4, futex, ...) isn't interrupted: the
+          signal is taken when the call is done. There is no EINTR
+        * a bad memory access (page fault) or a general protection fault
+          (#GP) gives the faulting thread a SIGSEGV right away. If SIGSEGV
+          is ignored, has no handler, or is blocked (a fault in its own
+          handler), the process dies of it
+        * invalid opcode (#UD) and divide error (#DE) in user mode are out
+          of scope: there is no SIGILL or SIGFPE, and a test that causes
+          them is invalid
+
+The end of stdin
+
+    The Makefile append (^D) to the 'in' file and the console driver
+    should interpret that as end of file (EOF).
+
+
+Defining a test case:
+~~~~~~~~~~~~~~~~~~~~~
+
+<csid>.in contains what goes into stdin for init (no ^D in it:
+          see "The end of stdin")
+<csid>.ok contains the expected output
+<csid>.dir:
+    - /sbin/init [required] the statically linked, non-relocatable test program
+    - /sbin/src  [nice to have] the sources and Makefile that produces
+                                /sbin/init
+
+
+Developing your test:
+   * the best approach is to copy t0.dir, t0.in and t0.ok and change
+     src/init.c
+   * you can build and run your own test on any CS Linux machine (only
+     yours: see "Important" at the top). You don't need a working kernel
+     to write your test which is why the test deadline is not tied to
+     having t0 working and is much earlier than usual
+
+
+For Makefile help:
+~~~~~~~~~~~~~~~~~~
+
+    make help
+
+To run tests:
+~~~~~~~~~~~~~
+
+    make clean test
+
+To make the output less noisy:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    make -s clean test
+
+Server view targets:
+~~~~~~~~~~~~~~~~~~~~
+
+    make get_results    # gets and displays your results
+    make get_tests      # gets tests from the server
+    make get_summary    # shows results per test
+
+To run one test
+~~~~~~~~~~~~~~~
+
+    make -s t0.test               # run the test once
+    make -s t0.loop               # run the test 10 times
+    LOOP_LIMIT=6 make -s t0.loop  # run the test 6 times
+    make -s t0.fail               # run the test until it fails
+
+To run by hand
+~~~~~~~~~~~~~~
+
+    ./run_qemu t0
+
+To run with gdb
+~~~~~~~~~~~~~~~
+
+    ./debug_qemu t0
+
+       Then follow the instructions on the screen
+
+To type input for a test by hand
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    ./console_qemu t0
+
+       Your keyboard is the console: each key goes straight to stdin
+       (Console::getch), with no echo and no line editing. ^d ends the
+       input: read returns 0 from then on. The kernel's debug output and
+       the console's output both print to the terminal. ^c terminates QEMU.
+
+To run with the QEMU monitor
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    ./monitor_qemu t0
+
+       Like run_qemu, but ^a c switches the terminal between the debug
+       output and the QEMU monitor (info registers, info mem, x/..., quit).
+       The console reads <test>.in, like run_qemu. ^c doesn't terminate
+       QEMU here, ^a x does.
+
+Generated files
+~~~~~~~~~~~~~~~
+
+For each test, a set of files will be generated:
+
+    <test>.debug        the debug output
+    <test>.time         how long it took to run the test
+    <test>.failure      failure information in case of failure
+    <test>.out          the lines that start with *** from the raw output
+    <test>.diff         the difference between <test>.out and <test>.ok
+    <test>.result       pass or fail
+    <test>.data         the ext2 disk image
+    build/<test>.console what the console reads: <test>.in, then ^D
+
+
