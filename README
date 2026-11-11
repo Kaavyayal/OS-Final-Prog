@@ -1,6 +1,6 @@
 Due:
-    11/07/2026 @ 11:59pm (test)
-    11/10/2026 @ 11:59pm (everything working)
+    11/15/2026 @ 11:59pm (test)
+    11/16/2026 @ 11:59pm (everything working)
 
 Important:
 ~~~~~~~~~~
@@ -25,90 +25,11 @@ Important:
 Assignment:
 ~~~~~~~~~~~
 
-    - Implement more system calls
-    - Donate a test case
-    - Answer the questions in REPORT.txt
+    - Implement MAP_SHARED, the file system is still not writable
+      and all file update attempts are done in the page cache (don't
+      survive reboots)
 
-No user/libc directory is provided. It's up to you to copy the one from
-p5 and evolve it. Feel free to collaborate with others and share code
-for this part.
-
-The new system calls
-~~~~~~~~~~~~~~~~~~~~
-
-The system calls behave like Linux's: same arguments, same results, same
-errors. Many are a subset of what Linux does; a call asking for a feature
-your kernel doesn't support returns EINVAL.
-
-The numbers in parentheses are the x86-64 system call numbers (RAX).
-
-File descriptors
-
-    - dup3 (292)
-        * flags: O_CLOEXEC only
-    - pipe2 (293)
-        * flags: O_CLOEXEC only
-        * a write to a pipe with no readers returns EPIPE; there is no
-          SIGPIPE
-        * a write is atomic (not mixed with other writers' bytes) only up
-          to 256 bytes, not PIPE_BUF (4096)
-
-Processes
-
-    - getcwd (79)
-    - chdir (80)
-
-Time
-
-    - nanosleep (35)
-        * waits at least the time asked for
-        * not interrupted by signals
-
-Synchronization
-
-    - futex (202): mutual exclusion only
-        * FUTEX_WAIT (without a timeout) and FUTEX_WAKE, with or without
-          FUTEX_PRIVATE_FLAG
-        * Linux's other commands, FUTEX_CLOCK_REALTIME, and a timeout
-          return EINVAL
-
-Signals
-
-    Only 5 signals: SIGINT (2), SIGUSR1 (10), SIGSEGV (11), SIGALRM (14),
-    SIGTERM (15).
-
-    - rt_sigaction (13)
-        * flags: SA_SIGINFO, SA_RESTORER and SA_RESTART only (SA_RESTART
-          has no effect: see below)
-        * oldact is ignored: the old action isn't given back
-        * sigsetsize must be 8
-        * sa_mask: only the 5 signals above matter
-    - rt_sigreturn (15): returns from a handler, through sa_restorer
-    - kill (62)
-        * pid > 0 only (no process groups, no -1)
-        * sig 0 checks that the process is there
-    - alarm (37): delivers SIGALRM
-
-    Limitations:
-        * a handler runs on the thread's stack (no sigaltstack, no
-          SA_ONSTACK)
-        * a handler runs with its signal blocked, plus sa_mask, until it
-          returns; there is no sigprocmask (rt_sigprocmask)
-        * a signal is taken on the way back to user mode. A system call
-          that waits (read, wait4, futex, ...) isn't interrupted: the
-          signal is taken when the call is done. There is no EINTR
-        * a bad memory access (page fault) or a general protection fault
-          (#GP) gives the faulting thread a SIGSEGV right away. If SIGSEGV
-          is ignored, has no handler, or is blocked (a fault in its own
-          handler), the process dies of it
-        * invalid opcode (#UD) and divide error (#DE) in user mode are out
-          of scope: there is no SIGILL or SIGFPE, and a test that causes
-          them is invalid
-
-The end of stdin
-
-    The Makefile append (^D) to the 'in' file and the console driver
-    should interpret that as end of file (EOF).
+    - donate a test
 
 
 Defining a test case:

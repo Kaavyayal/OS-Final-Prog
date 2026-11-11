@@ -1,21 +1,13 @@
-* Why is SA_RESTORER needed? What does Linux do if 'restorer` is 
-  null or not given? What does your kernel do?
+Consider the following scenario:
 
-* Some failures kill a process with SIGSEGV without running its
-  registered SIGSEGV handler. List 3 examples.
+* Process A mmaps "/abc" with MAP_SHARED
+* Process B reads from "/abc"
+* Process C writes to "/abc"
 
-* SIGUSR1 and SIGTERM are both pending, and both blocked in a handler.
-  When that handler returns, which of their handlers runs first? why?
+How does your implementation
 
-* Our implementation ignores the 'oldact' argument to rt_sigaction for
-  simplicity. Why is it needed? 
+* ensure that stores by A are observed by B?
+* writes by C are observed by A?
+* the in-memory state stays consistent?
 
-* Read about EINTR and SA_RESTART and outline a kernel change that would
-  make it possible for us to produce/handle them.
-
-* Why must FUTEX_WAIT compare the futex word and put the thread to
-  sleep as one atomic step? Show what goes wrong in a mutex if
-  they're two steps.
-
-* Why can't getcwd just return the string given to chdir
 
