@@ -4,10 +4,40 @@ Consider the following scenario:
 * Process B reads from "/abc"
 * Process C writes to "/abc"
 
+
+
 How does your implementation
 
 * ensure that stores by A are observed by B?
+First, I made sure that each file has one Node per 
+inode, which contains the page cache for that file. 
+When A maps the file with MAP_SHARED, its mapping uses 
+the same physical pages that B reads from. So, when A 
+updates a value in its mapping, B will read the updated 
+value from the page cache.
+
 * writes by C are observed by A?
+
+When C writes to the file, I copy the bytes into the 
+same cached pages that A has mapped. Since A is already
+using these physical pages, it can see the updated 
+values without having to unmap and map the file again. 
+These changes only happen in memory and aren't written 
+back to the disk.
+
 * the in-memory state stays consistent?
 
+I used mutexes to make sure that different processes 
+don't create separate Nodes or cached pages for the 
+same file. This also makes sure that a page is 
+finished loading before another process uses it. 
+Another mutex handles competing writes so that the 
+cached bytes and file size are updated together.
 
+I also used reference counts to keep pages in 
+memory while they're still being used. So, if 
+one process closes the file or unmaps it, the 
+other processes can still access their mappings. 
+However, the processes still have to synchronize 
+their own accesses if they're updating shared values 
+concurrently.

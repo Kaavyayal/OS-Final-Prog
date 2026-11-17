@@ -1,0 +1,10 @@
+all_tests/
+my_results/
+build/
+*.out
+*.debug
+*.diff
+*.result
+*.failure
+*.time
+*.cycles

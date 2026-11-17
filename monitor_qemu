@@ -1,0 +1,16 @@
+set -e
+
+UTCS_OPTS=-O3 make clean $1
+
+echo "QEMU monitor enabled"
+echo "  ^c will not terminate QEMU"
+echo "  use ^ax to exit"
+echo "  use ^ac to enter to QEMU monitor"
+
+time `make qemu_cmd` `make qemu_config_flags` \
+             -no-reboot \
+             -nographic \
+             `make -s $1.qemu_disk_flags` \
+             -serial mon:stdio \
+             `make -s $1.qemu_console_flags` \
+             -device isa-debug-exit,iobase=0xf4,iosize=0x04 || true

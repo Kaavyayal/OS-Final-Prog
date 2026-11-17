@@ -64,6 +64,45 @@ void test_main(void) {
     check(again[PAGE + 17] == 'X' && again[2 * PAGE + 29] == 'Y',
           "new mapping observes cached updates");
     say("*** unmap and remap preserve shared updates\n");
+    long other = syscall6(2, (long)"shared.dat", 2, 0, 0, 0, 0);
+    check(other >= 0, "reopen");
+    volatile unsigned char *separate = map(other, PAGE, PAGE);
+    check(separate[17] == 'X', "separate open shares cache");
+    byte = 'W';
+    check(syscall6(8, other, PAGE + 17, 0, 0, 0, 0) == PAGE + 17, "write seek");
+    check(syscall6(1, other, (long)&byte, 1, 0, 0, 0) == 1, "file write");
+    check(alias[17] == 'W' && separate[17] == 'W', "write updates mappings");
+    long priv = syscall6(9, 0, PAGE, 3, 2, other, PAGE);
+    check((unsigned long)priv < (unsigned long)-4095L, "private mmap");
+    volatile unsigned char *private = (volatile unsigned char *)priv;
+    check(private[17] == 'W', "private initial data");
+    private[17] = 'P';
+    check(separate[17] == 'W', "private store stays private");
+    say("*** file writes and private isolation OK\n");
+    long anon = syscall6(9, 0, 2 * PAGE, 3, 33, -1, 0);
+    check((unsigned long)anon < (unsigned long)-4095L, "shared anonymous mmap");
+    volatile unsigned char *shared = (volatile unsigned char *)anon;
+    shared[0] = 7;
+    long child = syscall6(57, 0, 0, 0, 0, 0, 0);
+    check(child >= 0, "fork");
+    if (!child) {
+        separate[18] = 'F';
+        shared[0] = 8;
+        shared[PAGE] = 9;
+        private[17] = 'C';
+        finish(0);
+    }
+    int status = -1;
+    check(syscall6(61, child, (long)&status, 0, 0, 0, 0) == child && !status,
+          "wait child");
+    check(alias[18] == 'F' && shared[0] == 8 && shared[PAGE] == 9,
+          "fork shares resident and lazy pages");
+    check(private[17] == 'P', "fork keeps private mapping isolated");
+    check(syscall6(11, anon, 2 * PAGE, 0, 0, 0, 0) == 0, "unmap anonymous");
+    check(syscall6(11, priv, PAGE, 0, 0, 0, 0) == 0, "unmap private");
+    check(syscall6(11, (long)separate, PAGE, 0, 0, 0, 0) == 0, "unmap separate");
+    check(syscall6(3, other, 0, 0, 0, 0, 0) == 0, "close separate");
+    say("*** fork shares file and anonymous mappings OK\n");
     check(syscall6(11, (long)alias, 2 * PAGE, 0, 0, 0, 0) == 0,
           "unmap alias");
     check(syscall6(11, (long)again, 3 * PAGE, 0, 0, 0, 0) == 0,

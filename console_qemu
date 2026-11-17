@@ -1,0 +1,17 @@
+set -e
+
+UTCS_OPTS=-O3 make $1
+
+echo "COM2 (what getch reads) is your keyboard: each key goes straight in"
+echo "  ^c terminates QEMU"
+
+# COM1 (the kernel's output) writes to the terminal directly, COM2 owns its
+# input: one terminal, no mux, no switching between ports.
+time `make qemu_cmd` `make qemu_config_flags` \
+             -no-reboot \
+             -nographic \
+             --monitor none \
+             `make -s $1.qemu_disk_flags` \
+             -serial file:/dev/stdout \
+             -serial stdio \
+             -device isa-debug-exit,iobase=0xf4,iosize=0x04 || true

@@ -2,4 +2,6 @@
 *** shared aliases agree in both directions
 *** read observes shared mapping updates
 *** unmap and remap preserve shared updates
+*** file writes and private isolation OK
+*** fork shares file and anonymous mappings OK
 *** MAP_SHARED test passed

@@ -1,0 +1,65 @@
+# clang-tidy configuration for `make lint` (passed with --config-file, not a
+# .clang-tidy: the custom checks are experimental, editors needn't see them).
+#
+# The checks:
+#   - about moves: a use after a move, a std::move that copies (a const
+#     argument), an && parameter that's never moved from
+#   - custom-*: this project's own rules, clang-query matchers on the AST
+#     (https://clang.llvm.org/extra/clang-tidy/QueryBasedCustomChecks.html).
+#     Try a matcher with clang-query first:
+#         clang-query kernel/mm/vmm.cc -- <the kernel's flags>
+#         clang-query> match <matcher>
+Checks: >-
+  -*,
+  bugprone-use-after-move,
+  cppcoreguidelines-rvalue-reference-param-not-moved,
+  performance-move-const-arg,
+  custom-*
+WarningsAsErrors: '*'
+# the kernel's headers too, once (not the compiler's)
+HeaderFilterRegex: '.*/kernel/.*'
+
+CustomChecks:
+  # Thread and Process are handles (thread.h, process.h): they go around by
+  # value, a reference to one can outlive what it refers to (an abandoned
+  # stack, a coroutine frame across a suspension). No variable, parameter,
+  # or member is a reference to one. Functions can return one by reference
+  # (Thread::current()), comparisons can take one, and the compiler's own
+  # copy/move members do.
+  - Name: handle-by-reference
+    Query: |
+      match declaratorDecl(
+          hasType(references(qualType(hasUnqualifiedDesugaredType(recordType(
+              hasDeclaration(cxxRecordDecl(hasAnyName("::Thread", "::Process")))))))),
+          unless(hasAncestor(functionDecl(isImplicit()))),
+          unless(hasAncestor(functionDecl(hasOverloadedOperatorName("==")))),
+          unless(isExpansionInSystemHeader())
+      ).bind("ref")
+    Diagnostic:
+      - BindName: ref
+        Message: "Threads and Processes go by value, not by reference"
+        Level: Warning
+
+  # A [[noreturn]] function never gets to the end of its scopes: its locals'
+  # destructors never run, and neither do its by-value parameters' (the
+  # caller destroys them after the call returns). The kernel's ones abandon
+  # their stack (userPageFault, Thread::return_to_user, restart_event_loop):
+  # whatever such a local holds (a Thread, a Process, a sync) is never let
+  # go. Do the work in a function that returns (see start_syscall). A type has a non-trivial destructor if it's user-provided,
+  # or implicit with a body (the compiler only defines one with work to do).
+  # Lambdas in it return, they're fine.
+  - Name: noreturn-local-destructor
+    Query: |
+      match varDecl(
+          hasLocalStorage(),
+          hasType(hasUnqualifiedDesugaredType(recordType(hasDeclaration(
+              cxxRecordDecl(hasMethod(cxxDestructorDecl(
+                  anyOf(isUserProvided(), hasBody(stmt()))))))))),
+          hasAncestor(functionDecl(isNoReturn())),
+          unless(hasAncestor(lambdaExpr()))
+      ).bind("local")
+    Diagnostic:
+      - BindName: local
+        Message: "its destructor never runs: a [[noreturn]] function never leaves its scopes"
+        Level: Warning
+
